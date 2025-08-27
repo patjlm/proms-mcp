@@ -51,34 +51,41 @@ git clone <repository-url>
 cd proms-mcp
 make install
 
-# Create datasource configuration
-cp local_config/datasources-example.yaml local_config/datasources.yaml
-# Edit local_config/datasources.yaml with your Prometheus instances
+# 1. Login to your target cluster and get your token
+oc login https://api.your-cluster.example.com:6443
+export OPENSHIFT_TOKEN=$(oc whoami -t)
 
-# Run the server (no authentication - recommended for development)
+# 2. Create datasource config with your token
+# this assumes your openshift token is valid to authenticate on prometheus
+cat > local_config/datasources.yaml << EOF
+datasources:
+  - name: "my-prometheus"
+    type: "prometheus"
+    url: "https://prometheus.your-cluster.example.com"
+    jsonData:
+      httpHeaderName1: "Authorization"
+    secureJsonData:
+      httpHeaderValue1: "Bearer ${OPENSHIFT_TOKEN}"
+EOF
+
+# 3. Run the server with authentication enabled
+make run-auth OPENSHIFT_API_URL=$(oc whoami --show-server)
+# Or run the server without authentication - the connection to prometheus will still be authenticated
 make run
-```
 
-**Authenticated mode** (for testing with OpenShift auth):
-
-```bash
-# Run with OpenShift authentication
-make run-auth OPENSHIFT_API_URL=https://api.cluster.example.com:6443
-```
-
-**Manual startup** (if not using make):
-
-```bash
-# Development mode (no authentication)
-export AUTH_MODE=none
-export GRAFANA_DATASOURCES_PATH=local_config/datasources.yaml
-uv run python -m proms_mcp
-
-# Authenticated mode
-export AUTH_MODE=active
-export OPENSHIFT_API_URL=https://api.cluster.example.com:6443
-export GRAFANA_DATASOURCES_PATH=local_config/datasources.yaml
-uv run python -m proms_mcp
+# 4. Configure your MCP client (e.g. with Cursor and auth-enabled proms-mcp)
+cat > .cursor/mcp.json << EOF
+{
+  "mcpServers": {
+    "proms-mcp-local-auth": {
+      "url": "http://localhost:8000/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${OPENSHIFT_TOKEN}"
+      }
+    }
+  }
+}
+EOF
 ```
 
 ### Container Development
